@@ -1,0 +1,94 @@
+#! /usr/bin/env python
+#
+# Copyright (C) 1998,1999,2000 by the Free Software Foundation, Inc.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software 
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
+"""Accept posts to a list and handle them properly.
+
+The main advertised address for a list should be filtered to this program,
+through the mail wrapper.  E.g. for list `test@yourdomain.com', the `test'
+alias would deliver to this script.
+
+Stdin is the mail message, and argv[1] is the name of the target mailing list.
+
+"""
+
+import sys
+
+import paths
+from Mailman import mm_cfg
+from Mailman import MailList
+from Mailman import Message
+from Mailman import Errors
+from Mailman.Logging.Utils import LogStdErr
+from Mailman.pythonlib.StringIO import StringIO
+
+LogStdErr("error", "post")
+
+
+
+def get_message(mlist):
+    msg = None
+    # Perhaps flow the message text through a filter program
+    prog = mlist.filter_prog
+    if prog:
+        import os, __main__
+        file = os.path.join(mm_cfg.VAR_PREFIX, 'filters', prog)
+        try:
+            execfile(file)
+            msg = Message.Message(StringIO(__main__.mailman_text))
+        except:
+            pass
+    if msg is None:
+        s = StringIO(sys.stdin.read())
+        msg = Message.Message(s)
+    return msg
+
+
+
+def main():
+    # TBD: If you've configured your list or aliases so poorly as to get
+    # either of these first two errors, there's little that can be done to
+    # save your messages.  They will be lost.  Minimal testing of new lists
+    # should avoid either of these problems.
+    try:
+        listname = sys.argv[1]
+    except IndexError:
+        sys.stderr.write('Mailman error: post got no listname.\n')
+        sys.exit(1)
+    try:
+        mlist = MailList.MailList(listname, lock=0)
+    except Errors.MMListError, e:
+        sys.stderr.write('Mailman error: post got bad listname: %s\n%s' %
+                         (listname, e))
+        sys.exit(1)
+    # We have a valid, unlocked list.  This is enough to extract the message
+    # object in a usable form.  From here on out, we should never lose
+    # messages.
+    msg = get_message(mlist)
+    # Immediately queue the message for the qrunner to deliver, mostly likely
+    # about a minute from now.  The advantage to this approach is that
+    # messages should never get lost -- some MTAs have a hard limit to the
+    # time a filter prog can run.  Postfix is a good example; if the limit is
+    # hit, the proc is SIGKILL'd giving us no chance to save the message.  It
+    # could take a long time to acquire the lock.  This way we're fairly safe
+    # against catastrophe at the expense of more disk I/O.
+    msg.Enqueue(mlist, tolist=1)
+
+
+
+if __name__ == '__main__':
+    main()

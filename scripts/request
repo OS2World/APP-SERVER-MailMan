@@ -1,0 +1,69 @@
+#! /usr/bin/env python
+#
+# Copyright (C) 1998,1999,2000 by the Free Software Foundation, Inc.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software 
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
+"""Process emailed commands.
+
+Called by the wrapper, stdin is the mail message, and argv[1] is the name
+of the target mailing list.
+
+Errors are redirected to logs/errors.
+"""
+
+
+import sys
+
+import paths
+from Mailman import MailList
+from Mailman import Message
+from Mailman import Errors
+from Mailman.Logging.Utils import LogStdErr
+
+LogStdErr("error", "mailcmd")
+
+
+
+def main():
+    try:
+        listname = sys.argv[1]
+    except IndexError:
+        sys.stderr.write('Mailman error: mailcmd got no listname.\n')
+        sys.exit(1)
+    try:
+        mlist = MailList.MailList(listname, lock=0)
+    except Errors.MMListError, e:
+        sys.stderr.write('Mailman error: mailcmd got bad listname: %s\n%s' %
+                         (listname, e))
+        sys.exit(1)
+    # Create the message object
+    msg = Message.Message(sys.stdin)
+    # Immediately queue the message for disposition by qrunner, most likely in
+    # about a minute from now.  The advantage to this approach is that
+    # messages should never get lost -- some MTAs have a hard limit to the
+    # time a filter prog can run.  Postfix is a good example; if the limit is
+    # hit, the proc is SIGKILL'd giving us no chance to save the message.  It
+    # could take a long time to acquire the lock.  This way we're fairly safe
+    # against catastrophe at the expense of more disk I/O.
+    #
+    # The `torequest' flag is a message to qrunner that an alternative route
+    # should be taken for this message.
+    msg.Enqueue(mlist, torequest=1)
+
+
+
+if __name__ == '__main__':
+    main()

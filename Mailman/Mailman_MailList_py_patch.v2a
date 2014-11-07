@@ -1,0 +1,13 @@
+*** MailList.py.orig	Sun Dec 15 01:17:28 2002
+--- MailList.py	Wed Dec 18 21:54:50 2002
+***************
+*** 840,845 ****
+--- 840,847 ----
+              os.link(fname, fname_last)
+          except OSError, e:
+              if e.errno <> errno.ENOENT: raise
++         if os.name == 'os2' and os.access(fname, os.F_OK):
++             os.unlink(fname)
+          os.rename(fname_tmp, fname)
+  
+      def Save(self):

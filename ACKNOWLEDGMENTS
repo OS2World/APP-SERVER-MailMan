@@ -1,0 +1,85 @@
+Mailman - The GNU Mailing List Management System
+Copyright (C) 1998,1999,2000 by the Free Software Foundation, Inc.
+59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
+
+The following folks are the primary maintainers of Mailman (in reverse
+alphabetical order):
+
+    Barry Warsaw, Mailman's yappy guard dog
+    John Viega, Mailman's inventor
+    Harald Meland, Norse Mailman
+    Ken Manheimer, Mailman's savior
+    Scott Cotton, Cookie-Monster
+
+They can be contacted directly via mailman-cabal@python.org.
+
+Here is the list of other contributors who have donated large bits of
+code, and have assigned copyright for this code to the FSF:
+
+    The Dragon De Monsyne
+    Juan Carlos Rey Anaya
+    Victoriano Giralt
+    Mads Kiilerich
+    Thomas Wouters
+
+Thanks also to Dragon for his winning Mailman logo contribution!
+
+Here is a list of authors of separate modules which are distributed
+with Mailman for convenience purposes:
+
+    Timothy O'Malley, author of misc/Cookie.py.  This file is
+    distributed under the GNU LGPL, and is included in the Mailman
+    distribution for convenience only.  It is not part of Mailman.
+
+Here is the list of other people who have contributed useful ideas,
+suggestions, bug fixes, testing, etc., or who have been very helpful
+in answering questions on mailman-users.
+
+    Jeff Berliner
+    Stan Bubrouski
+    Ted Cabeen
+    David Champion
+    Rob Ellis
+    Fil
+    Erik Forsberg
+    Darrell Fuhriman
+    Jeff Hahn
+    Paul Hebble
+    Jeremy Hylton
+    Ron Jarrell
+    Chris Kolar
+    Andrew Kuchling
+    Ricardo Kustner
+    J C Lawrence
+    Greg Lindahl
+    Christopher P. Lindsey
+    Tanner Lovelace
+    Gergely Madarasz
+    John A. Martin
+    Michael Mclay
+    Marc MERLIN
+    Nigel Metheringham
+    Dan Mick
+    Balazs Nagy
+    Hrvoje Niksic
+    "office"
+    Gerald Oskoboiny
+    Sean Reifschneider
+    Bernhard Reiter
+    Tristan Roddis
+    Chris Snell
+    Greg Stein
+    Owen Taylor
+    Jim Tittsler
+    Chuq Von Rospach
+    Michael Yount
+    Noam Zeilberger
+
+And everyone else on mailman-developers@python.org and
+mailman-users@python.org!  Thank you, all.
+
+
+Local Variables:
+mode: indented-text
+indent-tabs-mode: nil
+End:

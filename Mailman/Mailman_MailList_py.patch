@@ -1,0 +1,34 @@
+*** MailList.py.orig	Wed May 30 01:45:26 2001
+--- MailList.py	Sat Dec  7 22:19:36 2002
+***************
+*** 258,268 ****
+  
+      def InitTempVars(self, name):
+          """Set transient variables of this and inherited classes."""
+! 	self.__lock = LockFile.LockFile(
+!             os.path.join(mm_cfg.LOCK_DIR, name or '<site>') + '.lock',
+!             # TBD: is this a good choice of lifetime?
+!             lifetime = mm_cfg.LIST_LOCK_LIFETIME,
+!             withlogging = mm_cfg.LIST_LOCK_DEBUGGING)
+  	self._internal_name = name
+  	self._ready = 0
+  	if name:
+--- 258,275 ----
+  
+      def InitTempVars(self, name):
+          """Set transient variables of this and inherited classes."""
+!         if os.name in ('os2',):
+!             self.__lock = LockFile.LockFile(
+!                 os.path.join(mm_cfg.LOCK_DIR, name or '=site=') + '.lock',
+!                 # TBD: is this a good choice of lifetime?
+!                 lifetime = mm_cfg.LIST_LOCK_LIFETIME,
+!                 withlogging = mm_cfg.LIST_LOCK_DEBUGGING)
+!         else:
+!             self.__lock = LockFile.LockFile(
+!                 os.path.join(mm_cfg.LOCK_DIR, name or '<site>') + '.lock',
+!                 # TBD: is this a good choice of lifetime?
+!                 lifetime = mm_cfg.LIST_LOCK_LIFETIME,
+!                 withlogging = mm_cfg.LIST_LOCK_DEBUGGING)
+  	self._internal_name = name
+  	self._ready = 0
+  	if name:

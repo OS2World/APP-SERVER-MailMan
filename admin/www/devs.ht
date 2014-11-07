@@ -1,0 +1,26 @@
+Title: Developer Documentation
+Links: links.h doco-links.h
+
+<h3>Developer Documentation</h3>
+
+If you're the kind of person who loves to hack on the nitty gritty,
+you can start by <a href="admins.html">looking at</a> the
+<code>bin/withlist</code> script.  With this script you can directly
+examine and manipulate list object attributes.
+
+<p>Coming soon, all the rest of the gory details...
+
+<h3>SourceForge project</h3>
+
+Developers should start with the
+<a href="http://sourceforge.net/projects/mailman">Mailman project at
+SourceForge</a>.
+
+<h3>Mailman Wiki</h3>
+
+You should also take a look at the <a
+href="http://www.zope.org/Members/bwarsaw/MailmanDesignNotes">Mailman
+Design Notes</a> Wiki page.  This is where Mailman's future course
+will be plotted in plain sight.  Because Wikis are intended to be
+collaborative, you're free to contribute to this page in true Wiki
+fashion.

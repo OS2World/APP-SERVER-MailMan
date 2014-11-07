@@ -1,0 +1,48 @@
+*** LockFile.py.orig	Thu Oct 12 15:03:56 2000
+--- LockFile.py	Wed Dec 11 19:44:24 2002
+***************
+*** 65,70 ****
+--- 65,75 ----
+  import random
+  from stat import ST_NLINK, ST_MTIME
+  
++ if os.name == 'os2':
++     from emx_link import link as os2_link
++     os.link = os2_link
++     del os2_link
++ 
+  # Units are floating-point seconds.
+  DEFAULT_LOCK_LIFETIME  = 15
+  # Allowable a bit of clock skew
+***************
+*** 325,331 ****
+              else:
+                  raise
+          # TBD: can the link count ever be > 2?
+!         if self.__linkcount() <> 2:
+              return 0
+          return self.__read() == self.__tmpfname
+  
+--- 330,336 ----
+              else:
+                  raise
+          # TBD: can the link count ever be > 2?
+!         if os.name != 'os2' and self.__linkcount() <> 2:
+              return 0
+          return self.__read() == self.__tmpfname
+  
+***************
+*** 368,373 ****
+--- 373,384 ----
+          try:
+              # TBD: We probably don't need to modify atime, but this is easier.
+              os.utime(filename or self.__tmpfname, (t, t))
++             # on OS/2, due to link() emulation need to update global lockfile
++             # too if it exists and belongs to us
++             if os.name == 'os2' and not filename:
++                 if os.access(self.__lockfile, os.F_OK):
++                     if self.__read() == self.__tmpfname:
++                         os.utime(self.__lockfile, (t, t))
+          except OSError, e:
+              if e.errno <> errno.ENOENT: raise
+  

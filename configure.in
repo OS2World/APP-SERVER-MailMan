@@ -1,0 +1,503 @@
+# Copyright (C) 1998,1999,2000,2001,2002 by the Free Software Foundation, Inc.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software 
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
+dnl Process this file with autoconf to produce a configure script.
+AC_REVISION($Revision: 1.51.2.3 $)
+AC_PREREQ(2.0)
+AC_INIT(src/alias-wrapper.c)
+
+
+# /home/mailman is the default installation directory
+AC_PREFIX_DEFAULT(/home/mailman)
+
+
+# Check for Python!  Better be found on $PATH
+AC_MSG_CHECKING(for --with-python)
+AC_ARG_WITH(python, dnl
+[  --with-python		specify path to Python interpreter])
+case "$with_python" in
+    "")	ans="no";;
+    *)  ans="$with_python"
+esac
+AC_MSG_RESULT($ans)
+
+if test -z "$with_python"
+then
+	AC_PATH_PROG(with_python, python, /usr/local/bin/python)
+fi
+
+AC_MSG_CHECKING(Python interpreter)
+if test ! -x $with_python
+then
+    AC_MSG_ERROR([
+
+***** No Python interpreter found!
+***** Try including the configure option
+***** --with-python=/path/to/python/interpreter])
+fi
+AC_SUBST(PYTHON)
+PYTHON=$with_python
+AC_MSG_RESULT($PYTHON)
+
+# See if Python is new enough.  1.5.2 or better is required.
+AC_MSG_CHECKING(Python version)
+changequote(,)
+cat > conftest.py <<EOF
+import sys
+import string
+try:
+    v = sys.hexversion
+except AttributeError:
+    v = 0
+# int of hexversion 0x01050200
+if v >= 17105408:
+    s = string.split(sys.version)[0]
+else:
+    s = ""
+fp = open("conftest.out", "w")
+fp.write("%s\n" % s)
+fp.close()
+EOF
+changequote([, ])
+$PYTHON conftest.py
+version=`cat conftest.out`
+rm -f conftest.out conftest.py
+if test -z "$version"
+then
+    AC_MSG_ERROR([
+
+***** $PYTHON is too old (or broken)
+***** Python 1.5.2 or newer is required])
+fi
+AC_MSG_RESULT($version)
+
+# Checks for programs.
+AC_PROG_INSTALL
+AC_PROG_MAKE_SET
+AC_PATH_PROG(TRUE, true, true, $PATH:/bin:/usr/bin)
+
+# Find compiler, allow alternatives to gcc
+AC_MSG_CHECKING(for --without-gcc)
+AC_ARG_WITH(gcc, [  --without-gcc		never use gcc], [
+	case $withval in
+	no)	CC=cc
+		without_gcc=yes;;
+	yes)	CC=gcc
+		without_gcc=no;;
+	*)	CC=$withval
+		without_gcc=$withval;;
+	esac], without_gcc=no;)
+AC_MSG_RESULT($without_gcc)
+
+# If the user switches compilers, we can't believe the cache
+if test ! -z "$ac_cv_prog_CC" -a ! -z "$CC" -a "$CC" != "$ac_cv_prog_CC"
+then
+  AC_ERROR(cached CC is different -- throw away $cache_file
+(it is also a good idea to do 'make clean' before compiling))
+fi
+
+AC_PROG_CC
+
+
+# Optimizer/debugger flags passed between Makefiles
+AC_SUBST(OPT)
+if test -z "$OPT"
+then
+	case $GCC in
+	yes)
+		case $ac_cv_prog_cc_g in
+		yes)	OPT="-g -O2";;
+		*)	OPT="-O2";;
+		esac
+		;;
+	*)	OPT="-O";;
+	esac
+fi
+
+# We better be able to execute interpreters
+AC_SYS_INTERPRETER
+if test "$ac_cv_sys_interpreter" != "yes"
+then
+    AC_MSG_ERROR([
+
+***** Cannot execute interpreter scripts?
+***** Are you sure you system doesn't support this?])
+fi
+
+
+# Check for an alternate data directory, separate from installation dir.
+default_var_prefix="/var/mailman"
+AC_SUBST(VAR_PREFIX)
+AC_MSG_CHECKING(for --with-var-prefix)
+AC_ARG_WITH(var-prefix, dnl
+[  --with-var-prefix     directory for mutable data [/var/mailman]])
+case "$with_var_prefix" in
+	yes)	VAR_PREFIX="$default_var_prefix"; ans=$VAR_PREFIX;;
+	""|no)	VAR_PREFIX="$prefix"; ans="no";;
+	*)	VAR_PREFIX="$with_var_prefix"; ans=$VAR_PREFIX;
+esac
+AC_MSG_RESULT($ans)
+
+# new macro for finding GIDs
+AC_DEFUN(MM_FIND_GROUP_ID, [
+# $1 == variable name
+# $2 == user id to check for
+AC_SUBST($1)
+changequote(,)
+if test -z "$$1"
+then
+    cat > conftest.py <<EOF
+import grp, string
+gid = ''
+for group in string.split("$2"):
+    try:
+        try:
+	    gid = grp.getgrgid(int(group))[2]
+	    break
+	except ValueError:
+	    gid = grp.getgrnam(group)[2]
+	    break
+    except KeyError:
+        gid = ''
+fp = open("conftest.out", "w")
+fp.write("%s\n" % gid)
+fp.close()
+EOF
+    $PYTHON conftest.py
+    $1=`cat conftest.out`
+fi
+changequote([, ])
+AC_MSG_RESULT($$1)
+rm -f conftest.out conftest.py])
+
+
+# new macro for finding UIDs
+AC_DEFUN(MM_FIND_USER_ID, [
+# $1 == variable name
+# $2 == user id to check for
+AC_SUBST($1)
+changequote(,)
+if test -z "$$1"
+then
+    cat > conftest.py <<EOF
+import pwd, string
+uid = ''
+for user in string.split("$2"):
+    try:
+        try:
+	    uid = pwd.getpwuid(int(user))[2]
+	    break
+	except ValueError:
+	    uid = pwd.getpwnam(user)[2]
+	    break
+    except KeyError:
+        uid = ''
+fp = open("conftest.out", "w")
+fp.write("%s\n" % uid)
+fp.close()
+EOF
+    $PYTHON conftest.py
+    $1=`cat conftest.out`
+fi
+changequote([, ])
+AC_MSG_RESULT($$1)
+rm -f conftest.out conftest.py])
+
+# Check for some other uid to use than `mailman'
+AC_MSG_CHECKING(for --with-username)
+AC_ARG_WITH(username, dnl
+[  --with-username	specify a user name other than \"mailman\"])
+
+if test -z "$with_username"
+then
+	with_username="mailman"
+fi
+USERNAME=$with_username
+AC_MSG_RESULT($USERNAME)
+
+# User `mailman' must exist
+AC_SUBST(MAILMAN_UID)
+AC_MSG_CHECKING(for $USERNAME UID)
+MM_FIND_USER_ID(MAILMAN_UID, $USERNAME)
+if test -z "$MAILMAN_UID"
+then
+    AC_MSG_ERROR([
+***** No \"$USERNAME\" user found!
+***** Your system must have a \"$USERNAME\" user defined
+***** (usually in your /etc/passwd file).  Please see the INSTALL
+***** file for details.])
+fi
+
+
+# Check for some other gid to use than `mailman'
+AC_MSG_CHECKING(for --with-groupname)
+AC_ARG_WITH(groupname, dnl
+[  --with-groupname	specify a group name other than \"mailman\"])
+
+if test -z "$with_groupname"
+then
+	with_groupname="mailman"
+fi
+GROUPNAME=$with_groupname
+AC_MSG_RESULT($GROUPNAME)
+
+
+# Group `mailman' must exist
+AC_SUBST(MAILMAN_GID)
+AC_MSG_CHECKING(for $GROUPNAME GID)
+MM_FIND_GROUP_ID(MAILMAN_GID, $GROUPNAME)
+if test -z "$MAILMAN_GID"
+then
+    AC_MSG_ERROR([
+***** No \"$GROUPNAME\" group found!
+***** Your system must have a \"$GROUPNAME\" group defined
+***** (usually in your /etc/group file).  Please see the INSTALL
+***** file for details.])
+fi
+
+
+# Now make sure that $prefix is set up correctly.  It must be group
+# owned by `mailman', it must have the group sticky bit set, and it
+# must be a+rx
+if test "$VAR_PREFIX" = "NONE"
+then
+    VAR_PREFIX=$ac_default_prefix
+    prefixcheck=$ac_default_prefix
+else
+    prefixcheck=$VAR_PREFIX
+fi
+
+AC_MSG_CHECKING(permissions on $prefixcheck)
+changequote(,)
+cat > conftest.py <<EOF
+import os, grp, string
+from stat import *
+prefix = "$prefixcheck"
+mailmangid = $MAILMAN_GID
+problems = []
+try: statdata = os.stat(prefix)
+except os.error:
+    problems.append("Directory doesn't exist: " + prefix)
+else:    
+    mode = statdata[ST_MODE]
+    gid = statdata[ST_GID]
+    if mailmangid <> gid:
+	problems.append("Directory must be owned by group mailman: " + prefix)
+    perms = S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH
+    if (mode & perms) <> perms:
+	problems.append("Permissions should be at least 02775: " + prefix)
+if not problems:
+    msg = "okay\n"
+else:
+    msg = '***** ' + string.join(problems, '\n***** ') + '\n'
+fp = open("conftest.out", "w")
+fp.write(msg)
+fp.close()
+EOF
+changequote([, ])
+$PYTHON conftest.py
+status=`cat conftest.out`
+rm -f conftest.out conftest.py
+if test "$status" != "okay"
+then
+    AC_MSG_ERROR([
+***** Installation directory $prefixcheck is not configured properly!
+$status])
+fi
+
+AC_MSG_RESULT(okay)
+
+
+# Now find the UIDs and GIDs
+# Support --with-mail-gid and --with-cgi-gid
+AC_MSG_CHECKING(for mail wrapper GID)
+AC_ARG_WITH(mail-gid, dnl
+[  --with-mail-gid  	specify GID mail programs run as])
+if test -z "$with_mail_gid"
+then
+    AC_CACHE_VAL(ac_cv_group_mail, [dnl
+    ac_cv_group_mail="other mail daemon"])
+else
+    ac_cv_group_mail=$with_mail_gid
+fi
+MM_FIND_GROUP_ID(MAIL_GID, $ac_cv_group_mail)
+if test -z "$MAIL_GID"
+then
+    AC_MSG_ERROR([
+***** No existing group found for the mail_wrapper program.
+***** This is the group that your mail delivery agent runs under, and
+***** uses to run filter programs.  You might want to specify an
+***** existing group with the --with-mail-gid configure option.
+***** Please see your mail agent's documentation, and the INSTALL file
+***** for details])
+fi
+
+
+AC_MSG_CHECKING(for CGI wrapper GID)
+AC_ARG_WITH(cgi-gid, dnl
+[  --with-cgi-gid  	specify GID CGI programs run as])
+if test -z "$with_cgi_gid"
+then
+    AC_CACHE_VAL(ac_cv_group_cgi, [dnl
+    ac_cv_group_cgi="www www-data nobody"])
+else
+    ac_cv_group_cgi=$with_cgi_gid
+fi
+
+MM_FIND_GROUP_ID(CGI_GID, $ac_cv_group_cgi)
+if test -z "$CGI_GID"
+then
+    AC_MSG_ERROR([
+***** No existing group found for the cgi_wrapper program.
+***** This is the group that your Web server runs CGI scripts under.
+***** You might want to specify an existing group with the
+***** --with-cgi-gid configure option.  Please see your Web server's
+***** documentation, and the INSTALL file for details])
+fi
+
+
+#MM_FIND_USER_ID(ALIAS_UID, mailman, alias_wrapper)
+#MM_FIND_GROUP_ID(ALIAS_GID, mail, alias_wrapper)
+
+# Check for CGI extensions, required by some Web servers
+AC_SUBST(CGIEXT)
+AC_MSG_CHECKING(for CGI extensions)
+AC_ARG_WITH(cgi-ext, dnl
+[  --with-cgi-ext	specify extension for CGI programs (include dot)])
+if test -z "$with_cgi_ext"
+then
+	CGIEXT=''
+	with_cgi_ext='no'
+else
+	CGIEXT=$with_cgi_ext
+fi
+AC_MSG_RESULT($with_cgi_ext)
+
+
+# figure out the DEFAULT_HOST_NAME and DEFAULT_URL
+AC_SUBST(FQDN)
+AC_SUBST(URL)
+changequote(,)
+cat > conftest.py <<EOF
+# attempt to figure out the default hostname and URL
+from socket import *
+import string
+import sys
+import os
+def barf(fqdn, www):
+    sys.stdout = sys.stderr
+    print 'host info not found, set \$MAILHOST and/or \$WWWHOST environ vars'
+    print '\$MAILHOST=%s, \$WWWHOST=%s' % (fqdn, www)
+    sys.exit(1)
+fqdn = os.environ.get('MAILHOST')
+www = os.environ.get('WWWHOST')
+aliases = []
+if fqdn:
+    aliases.append(fqdn)
+if www:
+    aliases.append(www)
+if not fqdn:
+    try:
+        host, aliases, ipaddrs = gethostbyaddr(gethostbyname(gethostname()))
+    except error:
+        barf(fqdn, www)
+    aliases.insert(0, host)
+for h in aliases:
+    parts = string.split(h, '.')
+    if len(parts) > 1:
+        if parts[0] == 'www':
+            www = h
+        elif not fqdn:
+            fqdn = h
+    if www and fqdn:
+        break
+if fqdn is None:
+    barf(fqdn, www)
+if www is None:
+    www = fqdn
+fp = open('conftest.out', 'w')
+if www and fqdn:
+    fp.write('%s\n%s\n' % (fqdn, www))
+elif not www and fqdn:
+    fp.write('%s\n%s\n' % (fqdn, fqdn))
+elif www:
+    dhn = string.join(string.split(www, '.')[1:], '.')
+    fp.write('%s\n%s\n' % (dhn, www))
+else:
+    fp.write('please.change.me\nwww.please.change.me\n')
+fp.close()
+EOF
+$PYTHON conftest.py
+if [ $? -eq 1 ]
+then
+    exit
+fi
+changequote([, ])
+AC_MSG_CHECKING(for default fully qualified host name)
+if test -z "$FQDN"
+then
+    FQDN=`head -1 conftest.out`
+fi
+AC_MSG_RESULT($FQDN)
+AC_MSG_CHECKING(for default URL host component)
+if test -z "$URL"
+then
+    URL=`tail -1 conftest.out`
+fi
+AC_MSG_RESULT($URL)
+rm -f conftest.out conftest.py
+
+# Checks for libraries.
+AC_CHECK_FUNCS(strerror setregid syslog)
+if test $ac_cv_func_syslog = no; then
+  # syslog is not in the default libraries.  See if it's in some other.
+  # Additionally, for at least SCO OpenServer, syslog() is #defined to
+  # one of several _real_ functions in syslog.h, so we need to do the test
+  # with the appropriate include.
+  for lib in bsd socket inet; do
+    AC_MSG_CHECKING(for syslog in -l$lib)
+    Mailman_LIBS_save="$LIBS"; LIBS="$LIBS -l$lib"
+    AC_TRY_LINK([#include <syslog.h>],
+                [syslog(LOG_DEBUG, "Just a test...");],
+                [AC_MSG_RESULT(yes)
+      AC_DEFINE(HAVE_SYSLOG)
+      break],
+                [AC_MSG_RESULT(no)
+      LIBS="$Mailman_LIBS_save"])
+    unset Mailman_LIBS_save
+  done
+fi
+
+# Checks for header files.
+AC_HEADER_STDC
+AC_CHECK_HEADERS(syslog.h)
+
+# Checks for typedefs, structures, and compiler characteristics.
+AC_TYPE_UID_T
+AC_TYPE_GETGROUPS
+
+# Checks for library functions.
+AC_CHECK_FUNCS(vsnprintf)
+
+dnl Output everything
+AC_OUTPUT([misc/paths.py Mailman/Defaults.py Mailman/mm_cfg.py.dist
+           src/Makefile misc/Makefile bin/Makefile
+	   Mailman/Makefile Mailman/Cgi/Makefile Mailman/Logging/Makefile
+	   Mailman/Archiver/Makefile Mailman/pythonlib/Makefile
+	   Mailman/Handlers/Makefile Mailman/Bouncers/Makefile
+	   templates/Makefile cron/Makefile
+	   filters/Makefile scripts/Makefile
+	   cron/crontab.in Makefile])

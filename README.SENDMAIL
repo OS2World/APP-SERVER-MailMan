@@ -1,0 +1,40 @@
+Mailman - The GNU Mailing List Management System
+Copyright (C) 1998,1999,2000 by the Free Software Foundation, Inc.
+59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
+
+SENDMAIL ISSUES
+
+Many newer versions of Sendmail come with a restricted execution
+utility called "smrsh", which limits the executables that sendmail can
+use as mail filter programs.  You need to explicitly allow Mailman's
+wrapper program to be used with smrsh before it will work.  If mail is
+not getting delivered to Mailman's wrapper program and you're getting
+an "operating system error" in your mail syslog, this could be your
+problem.
+
+One good way of doing this is to:
+
+    - cd into /etc/smrsh (or where ever it happens to reside on your
+      system, such as /var/smrsh or /usr/local/smrsh).
+
+    - create a symbolic link to Mailman's wrapper program
+
+For example, if you've installed Mailman in the standard location, you
+can just execute these commands (you might have to do these as root):
+
+    % cd /etc/smrsh
+    % ln -s /home/mailman/mail/wrapper wrapper
+
+One complication: if you're running Majordomo and Mailman
+simultaneously (i.e. in the process of migrating from MD to MM :),
+then you might have a small problem because Majordomo also uses a
+program called `wrapper'.  In this case, Paul Tomblin suggests calling
+the Mailman symlink `mailman_wrapper', and changing the alias entries
+to call this instead of `wrapper'.  You might want to hack bin/newlist
+to output this instead.
+
+
+Local Variables:
+mode: text
+indent-tabs-mode: nil
+End:

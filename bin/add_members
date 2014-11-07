@@ -1,0 +1,221 @@
+#! /usr/bin/env python
+#
+# Copyright (C) 1998,1999,2000 by the Free Software Foundation, Inc.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software 
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+#
+# argv[1] should be the name of the list.
+# argv[2] should be the list of non-digested users.
+# argv[3] should be the list of digested users.
+
+# Make sure that the list of email addresses doesn't contain any comments,
+# like majordomo may throw in.  For now, you just have to remove them manually.
+
+"""Add members to a list from the command line.
+
+Usage:
+    add_members [-n <file>] [-d <file>] [-c <y|n>] [-w <y|n>] [-h] listname
+
+Where:
+
+    --non-digest-members-file <file>
+    -n <file>
+        A file containing addresses of the members to be added, one
+        address per line.  This list of people become non-digest
+        members.  If <file> is `-', read addresses from stdin.
+
+    --digest-members-file <file>
+    -d <file>
+        Similar to above, but these people become digest members.
+
+    --changes-msg=<y|n>
+    -c <y|n> 
+	set whether or not to send the list members the `there's going to be
+	big changes to your list' message. defaults to no.
+
+    --welcome-msg=<y|n>
+    -w <y|n>
+        set whether or not to send the list members a welcome message,
+        overriding whatever the list's `send_welcome_msg' setting is.
+
+    --help
+    -h
+        Print this help message and exit.
+
+    listname
+        The name of the Mailman list you are adding members to.  It must
+        already exist.
+
+You must supply at least one of -n and -d options.  At most one of the
+files can be `-'.
+
+"""
+
+import sys
+import os
+import string
+import getopt
+import paths
+
+from Mailman import MailList
+from Mailman import Utils
+from Mailman import Message
+from Mailman import Errors
+from Mailman import mm_cfg
+from Mailman.Handlers import HandlerAPI
+
+
+
+def usage(status, msg=''):
+    if msg:
+        print msg
+    print __doc__ % globals()
+    sys.exit(status)
+
+
+
+def ReadFile(filename):
+    lines = []
+    if filename == "-":
+        fp = sys.stdin
+    else:
+        fp = open(filename)
+    lines = filter(None, map(string.strip, fp.readlines()))
+    fp.close()
+    return lines
+
+
+
+def SendExplanation(mlist, users):
+    adminaddr = mlist.GetAdminEmail()
+    d = {'listname'    : mlist.real_name,
+         'listhost'    : mlist.host_name,
+         'listaddr'    : mlist.GetListEmail(),
+         'listinfo_url': mlist.GetScriptURL('listinfo', absolute=1),
+         'requestaddr' : mlist.GetRequestEmail(),
+         'adminaddr'   : adminaddr,
+         'version'     : mm_cfg.VERSION,
+         }
+    text = Utils.maketext('convert.txt', d)
+    subject = 'Big change in %(listname)s@%(listhost)s mailing list' % d
+    msg = Message.OutgoingMessage(text)
+    msg['From'] = adminaddr
+    msg['Subject'] = subject
+    HandlerAPI.DeliverToUser(mlist, msg, {'recips': users})
+
+
+
+def main():
+    try:
+        opts, args = getopt.getopt(sys.argv[1:],
+                                   'n:d:c:w:h',
+                                   ['non-digest-members-file=',
+                                    'digest-members-file=',
+                                    'changes-msg=',
+				    'welcome-msg=',
+                                    'help'])
+    except getopt.error, msg:
+        usage(1, msg)
+
+    if not len(args) == 1:
+        usage(1)
+
+    listname = string.lower(args[0])
+    nfile = None
+    dfile = None
+    send_changes_msg = 0
+    send_welcome_msg = -1
+    for opt, arg in opts:
+        if opt in ('-h', '--help'):
+            usage(0)
+        elif opt in ('-d', '--digest-members-file'):
+            dfile = arg
+        elif opt in ('-n', '--non-digest-members-file'):
+            nfile = arg
+        elif opt in ('-c', '--changes-msg'):
+            if arg == 'y':
+                send_changes_msg = 1
+            elif arg == 'n':
+                send_changes_msg = 0
+            else:
+                usage(1)
+        elif opt in ('-w', '--welcome-msg'):
+            if arg == 'y':
+                send_welcome_msg = 1
+            elif arg == 'n':
+                send_welcome_msg = 0
+            else:
+                usage(1)
+                
+    if dfile is None and nfile is None:
+        usage(1)
+
+    if dfile == "-" and nfile == "-":
+        print "Sorry, can't read both digest *and* normal members from stdin."
+        sys.exit(1)
+
+    try:
+        ml = MailList.MailList(listname)
+    except Errors.MMUnknownListError:
+        usage(1, 'You must first create the list by running: newlist %s' %
+              listname)
+    if send_welcome_msg == -1:
+        send_welcome_msg = ml.send_welcome_msg
+    try:
+        dmembers = []
+        if dfile:
+            try:
+                dmembers = ReadFile(dfile)
+            except IOError:
+                pass
+
+        nmembers = []
+        if nfile:
+            try:
+                nmembers = ReadFile(nfile)
+            except IOError:
+                pass
+
+        if not dmembers and not nmembers:
+            usage(1)
+
+        if nmembers:
+            nres = ml.ApprovedAddMembers(nmembers, None, 0, send_welcome_msg)
+        else: nres = {}
+
+        if dmembers:
+            dres = ml.ApprovedAddMembers(dmembers, None, 1, send_welcome_msg)
+        else: dres = {}
+
+        for result in (nres, dres):
+            for name in result.keys():
+                if result[name] is None:
+                    pass
+                else:
+                    # `name' was not subscribed, find out why.  On failures,
+                    # result[name] is set from sys.exc_info()[:2]
+                    e, v = result[name]
+                    if e is Errors.MMAlreadyAMember:
+                        print 'Already subscribed (skipping):', name
+                    elif issubclass(e, Errors.EmailAddressError):
+                        if name == '': name = '( blank line )'
+                        print "Not a valid email address:", name
+
+        if send_changes_msg:
+            SendExplanation(ml, nmembers + dmembers)
+    finally:
+        ml.Unlock()
+
+main()

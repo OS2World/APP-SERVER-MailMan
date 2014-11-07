@@ -1,0 +1,257 @@
+#! /usr/bin/env python
+#
+# Copyright (C) 1998,1999,2000 by the Free Software Foundation, Inc.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software 
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
+"""Synchronize a mailing list's membership with a flat file.
+
+This script is useful if you have a Mailman mailing list and a sendmail
+:include: style list of addresses (also as is used in Majordomo).  For every
+address in the file that does not appear in the mailing list, the address is
+added.  For every address in the mailing list that does not appear in the
+file, the address is removed.  Other options control what happens when an
+address is added or removed.
+
+Usage: %(program)s [options] -f file listname
+
+Where `options' are:
+
+    --no-change
+    -n
+        Don't actually make the changes.  Instead, print out what would be
+        done to the list.
+
+    --welcome-msg[=<yes|no>]
+    -w[=<yes|no>]
+        Sets whether or not to send the newly added members a welcome
+        message, overriding whatever the list's `send_welcome_msg' setting
+        is.  With -w=yes or -w, the welcome message is sent.  With -w=no, no
+        message is sent.
+
+    --digest[=<yes|no>]
+    -d[=<yes|no>]
+        Selects whether to make newly added members receive messages in
+        digests.  With -d=yes or -d, they become digest members.  With -d=no
+        (or if no -d option given) they are added as regular members.
+
+    --notifyadmin[=<yes|no>]
+    --a[=<yes|no>]
+        Specifies whether the admin should be notified for each subscription
+        or unsubscription.  If you're adding a lot of addresses, you
+        definitely want to turn this off!  With -a=yes or -a, the admin is
+        notified.  With -a=no, the admin is not notified.  With no -a option,
+        the default for the list is used.
+
+    --file <filename | ->
+    -f <filename | ->
+        This option is required.  It specifies the flat file to synchronize
+        against.  Email addresses must appear one per line.  If filename is
+        `-' then stdin is used.
+
+    --help
+    -h
+        Print this message.
+
+    listname
+        Required.  This specifies the list to synchronize.
+"""
+
+import sys
+import string
+
+import paths
+from Mailman import MailList
+from Mailman import Errors
+from Mailman import Utils
+
+
+
+program = sys.argv[0]
+
+def usage(status, msg=''):
+    print __doc__ % globals()
+    if msg:
+        print msg
+    sys.exit(status)
+
+
+
+def startswith(s, prefix):
+    return s[:len(prefix)] == prefix
+
+def endswith(s, suffix):
+    return s[-len(suffix):] == suffix
+
+
+
+def yesno(opt):
+    i = string.find(opt, '=')
+    yesno = string.lower(opt[i+1:])
+    if yesno in ('y', 'yes'):
+        return 1
+    elif yesno in ('n', 'no'):
+        return 0
+    else:
+        usage(1, 'Bad choice: ' + yesno)
+        # no return
+
+
+def main():
+    dryrun = 0
+    digest = 0
+    welcome = None
+    filename = None
+    listname = None
+    notifyadmin = None
+
+    i = 1
+    while i < len(sys.argv):
+        opt = sys.argv[i]
+        if opt in ('-h', '--help'):
+            usage(0)
+        elif opt in ('-n', '--no-change'):
+            dryrun = 1
+            i = i + 1
+            print 'Dry run mode'
+        elif opt in ('-d', '--digest'):
+            digest = 1
+            i = i + 1
+        elif startswith(opt, '-d=') or startswith(opt, '--digest='):
+            digest = yesno(opt)
+            i = i + 1
+        elif opt in ('-w', '--welcome-msg'):
+            welcome = 1
+            i = i + 1
+        elif startswith(opt, '-w=') or startswith(opt, '--welcome-msg='):
+            welcome = yesno(opt)
+            i = i + 1
+        elif opt in ('-f', '--file'):
+            if filename is not None:
+                usage(1, 'Only one -f switch allowed')
+            try:
+                filename = sys.argv[i+1]
+            except IndexError:
+                usage(1, 'No argument to -f given')
+            i = i + 2
+        elif opt in ('-a', '--notifyadmin'):
+            notifyadmin = 1
+            i = i + 1
+        elif startswith(opt, '-a=') or startswith(opt, '--notifyadmin='):
+            notifyadmin = yesno(opt)
+            i = i + 1
+        elif opt[0] == '-':
+            usage(1, 'Illegal option: ' + opt)
+        else:
+            try:
+                listname = string.lower(sys.argv[i])
+                i = i + 1
+            except IndexError:
+                usage(1, 'No listname given')
+            break
+        
+    if listname is None or filename is None:
+        usage(1, 'Must have a listname and a filename')
+
+    # read the list of addresses to sync to from the file
+    if filename == '-':
+        filemembers = sys.stdin.readlines()
+    else:
+        try:
+            fp = open(filename)
+        except IOError, (code, msg):
+            usage(1, 'Cannot read address file: %s: %s' % (filename, msg))
+        try:
+            filemembers = fp.readlines()
+        finally:
+            fp.close()
+
+    # strip out lines we don't care about, they are comments (# in first
+    # non-whitespace) or are blank
+    for i in range(len(filemembers)-1, -1, -1):
+        addr = string.strip(filemembers[i])
+        if addr == '' or addr[:1] == '#':
+            del filemembers[i]
+            print 'Ignore  :  %30s' % addr
+
+    # first filter out any invalid addresses
+    filemembers = Utils.ParseAddrs(filemembers)
+    invalid = 0
+    for addr in filemembers:
+        try:
+            Utils.ValidateEmail(addr)
+        except Errors.EmailAddressError:
+            print 'Invalid :  %30s' % addr
+            invalid = 1
+    if invalid:
+        print 'You must fix the preceding invalid addresses first.'
+        sys.exit(1)
+
+    # get the locked list object
+    try:
+        mlist = MailList.MailList(listname)
+    except Errors.MMListError, e:
+        print 'No such list "%s"\n%s' % (listname, e)
+        sys.exit(1)
+
+    try:
+        # get the list of addresses currently subscribed
+        addrs = {}
+        needsadding = {}
+        for addr in (mlist.GetDeliveryMembers() +
+                     mlist.GetDigestDeliveryMembers()):
+            addrs[string.lower(addr)] = addr
+
+        for addr in filemembers:
+            # any address found in the file that is also in the list can be
+            # ignored.  if not found in the list, it must be added later
+            laddr = string.lower(addr)
+            if addrs.has_key(laddr):
+                del addrs[laddr]
+            else:
+                needsadding[laddr] = addr
+
+        if not needsadding and not addrs:
+            print 'Nothing to do.'
+            sys.exit(0)
+
+        # addrs contains now all the addresses that need removing
+        for laddr, addr in needsadding.items():
+            pw = Utils.MakeRandomPassword()
+            # should not already be subscribed, otherwise our test above is
+            # broken.  Bogosity is if the address is listed in the file more
+            # than once.  Second and subsequent ones trigger an
+            # MMAlreadyAMember error.  Just catch it and go on.
+            try:
+                if not dryrun:
+                    mlist.ApprovedAddMember(addr, pw, digest,
+                                            welcome, notifyadmin)
+                print 'Added  : %30s (%30s)' % (laddr, addr)
+            except Errors.MMAlreadyAMember:
+                pass
+
+        for laddr, addr in addrs.items():
+            # should be a member, otherwise our test above is broken
+            if not dryrun:
+                mlist.DeleteMember(addr, admin_notif=notifyadmin)
+            print 'Removed: %30s (%30s)' % (laddr, addr)
+
+        mlist.Save()
+    finally:
+        mlist.Unlock()
+
+
+if __name__ == '__main__':
+    main()
